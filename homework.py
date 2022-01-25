@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import requests
@@ -39,26 +40,37 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.info('Удачная отправка сообщения в Telegram')
-    except Exception as e:
+    except Exception:
         logger.error('Сбой при отправке сообщения в Telegram')
-        print(f'Сбой отправки сообщения: {e}')
 
 
 def get_api_answer(current_timestamp):
     """Делает запрос к единственному эндпоинту API-сервиса."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    response = requests.get(ENDPOINT, headers=HEADERS, params=params)
+    try:
+        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
+    except requests.exceptions.HTTPError as errh:
+        logger.error(f'Http-ошибка:{errh}')
+    except requests.exceptions.ConnectionError as errc:
+        logger.error(f'Ошибка подключения:{errc}')
+    except requests.exceptions.Timeout as errt:
+        logger.error(f'Истекло время запроса:{errt}')
+    except requests.exceptions.RequestException as err:
+        logger.error(f'Другая ошибка запроса:{err}')
     if response.status_code != HTTPStatus.OK:
         logger.error('Недоступность эндпоинта')
         raise requests.exceptions.RequestException
-    return response.json()
+    try:
+        return response.json()
+    except json.decoder.JSONDecodeError:
+        logger.error('Ошибка преобразования в json')
 
 
 def check_response(response):
     """Проверяет ответ API на корректность."""
-    if type(response) == dict:
-        if 'homeworks' in response.keys():
+    if type(response) is dict:
+        if 'homeworks' in response:
             if len(
                 response.get('homeworks')
             ) != 0 and type(
